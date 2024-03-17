@@ -1,41 +1,29 @@
-import string
+import hvac
 import random
-from pyvault import Client
+import string
+import getpass
 
-client = Client()
+ENVIRONMENT = input("Введите значение env (test/prod): ")
+BUCKET = input("Введите название бакета: ")
+SECRET_PATH = f"infra/minio/{ENVIRONMENT}/{BUCKET}"
 
-client.auth.login(url='',token='')
+PASSWORD = getpass.getpass(prompt="Введите пароль для секрета: ")
 
-def generate_password(length=15):
-    characters = string.ascii_letters + string.digits
-    password = ''.join(random.choice(characters) for _ in range(length))
-    return password
+if not PASSWORD:
+    PASSWORD_LENGTH = 20
+    PASSWORD_CHARS = string.ascii_letters + string.digits
+    PASSWORD = ''.join(random.choice(PASSWORD_CHARS) for _ in range(PASSWORD_LENGTH))
 
-def create_user_folder(bucket):
-    folder_path = f'goods/infra/datasource/minio/prod/{bucket}'
-    
-    # Создаем папку пользователя в Vault
-    response = client.secrets.kv.v1.create_or_update_secret(folder_path, {})
-    
-    if response.status_code == 200:
-        print(f"Папка для  {bucket} успешно создана в Vault.")
-    else:
-        print("Ошибка при создании папки  в Vault.")
+client = hvac.Client(url=SECRET_PATH, token=os.environ["MM_VAULT_TOKEN"])
 
-def write_credentials_to_vault(bucket, password):
-    folder_path = f'goods/infra/datasource/minio/prod/{bucket}'
-    
-    response = client.secrets.kv.v1.create_or_update_secret(folder_path, {'user': bucket, 'password': password})
-    
-    if response.status_code == 200:
-        print(f"Имя пользователя и пароль успешно сохранены в Vault для пользователя {bucket}.")
-    else:
-        print("Ошибка при записи данных в Vault.")
-
-if __name__ == "__main__":
-    bucket = input("Введите бакет: ")
-    password = generate_password()
-    print(f"Сгенерированный пароль для пользователя {bucket}: {password}")
-    
-    create_user_folder(bucket)
-    write_credentials_to_vault(bucket, password)
+try:
+    client.secrets.kv.v2.create_or_update_secret(
+        path=SECRET_PATH,
+        secret=dict(user=BUCKET, password=PASSWORD)
+    )
+    print("Секрет успешно создан в Vault:")
+    print("Путь:", SECRET_PATH)
+    print("User:", BUCKET)
+    print("Password:")
+except Exception as e:
+    print("Произошла ошибка при создании секрета в Vault:", e)
